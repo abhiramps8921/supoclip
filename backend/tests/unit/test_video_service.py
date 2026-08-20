@@ -21,9 +21,9 @@ async def test_process_video_complete_uses_fallback_when_ai_selects_no_segments(
     video_path.write_bytes(b"placeholder")
 
     config = SimpleNamespace(
-        max_video_duration=5400,
+        max_video_duration=90,
         clip_duration=30,
-        fast_mode_max_clips=4,
+        fast_mode_max_clips=10,
     )
     monkeypatch.setattr(video_service_module, "get_config", lambda: config)
     monkeypatch.setattr(
