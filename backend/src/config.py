@@ -50,7 +50,7 @@ class Config:
             os.getenv("APIFY_RUN_TIMEOUT_SECONDS", "900")
         )
 
-        self.max_video_duration = int(os.getenv("MAX_VIDEO_DURATION", "5400"))
+        self.max_video_duration = int(os.getenv("MAX_VIDEO_DURATION", "43200"))
         self.max_video_upload_bytes = int(
             os.getenv("MAX_VIDEO_UPLOAD_BYTES", "50000000000")
         )
@@ -69,6 +69,9 @@ class Config:
         # Fail-safe: queued tasks should not stay queued forever
         self.queued_task_timeout_seconds = int(
             os.getenv("QUEUED_TASK_TIMEOUT_SECONDS", "180")
+        )
+        self.worker_job_timeout_seconds = int(
+            os.getenv("WORKER_JOB_TIMEOUT_SECONDS", "86400")
         )
 
         self.self_host = self._get_bool_env("SELF_HOST", True)
