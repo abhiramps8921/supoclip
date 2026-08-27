@@ -88,6 +88,7 @@ interface TaskDetails {
   status: string;
   progress?: number;
   progress_message?: string;
+  error_code?: string | null;
   clips_count: number;
   created_at: string;
   updated_at: string;
@@ -258,6 +259,17 @@ export default function TaskPage() {
   }, [params.id, fetchTaskStatus]);
 
   useEffect(() => {
+    const taskStatus = task?.status;
+    if (!params.id || (taskStatus !== "queued" && taskStatus !== "processing")) return;
+
+    const interval = window.setInterval(() => {
+      void fetchTaskStatus(0, 0);
+    }, 10000);
+
+    return () => window.clearInterval(interval);
+  }, [params.id, task?.status, fetchTaskStatus]);
+
+  useEffect(() => {
     const loadFonts = async () => {
       try {
         const response = await fetch("/api/fonts", { cache: "no-store" });
@@ -351,12 +363,14 @@ export default function TaskPage() {
     });
 
     eventSource.addEventListener("error", (e) => {
-      console.error("❌ SSE error:", e);
       const maybeMessageEvent = e as MessageEvent<string>;
       if (typeof maybeMessageEvent.data === "string" && maybeMessageEvent.data.length > 0) {
         const data = JSON.parse(maybeMessageEvent.data);
         setError(data.error || "Connection error");
+      } else {
+        console.warn("Live progress stream disconnected; continuing with status polling.");
       }
+      void fetchTaskStatus(0, 0);
       eventSource.close();
     });
 
@@ -933,7 +947,14 @@ export default function TaskPage() {
                 <AlertCircle className="w-12 h-12 mx-auto mb-2" />
                 <h2 className="text-xl font-semibold">Processing Failed</h2>
               </div>
-              <p className="text-gray-600 mb-4">There was an error processing your video. Please try again.</p>
+              <p className="text-gray-600 mb-4">
+                {task.progress_message || "There was an error processing your video. Please try again."}
+              </p>
+              {task.error_code && (
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-4">
+                  {task.error_code.replace(/_/g, " ")}
+                </p>
+              )}
               <Link href="/">
                 <Button>
                   <ArrowLeft className="w-4 h-4" />

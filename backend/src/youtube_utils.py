@@ -10,7 +10,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -26,6 +26,10 @@ YOUTUBE_METADATA_PROVIDER_DATA_API = "youtube_data_api"
 YOUTUBE_DOWNLOAD_PROVIDER_YTDLP = "yt_dlp"
 YOUTUBE_DOWNLOAD_PROVIDER_APIFY = "apify"
 YOUTUBE_DATA_API_URL = "https://www.googleapis.com/youtube/v3/videos"
+YTDLP_SAFARI_FORMAT_SELECTOR = "best[height<=1080][ext=mp4]/best[height<=1080]/best"
+YTDLP_DEFAULT_FORMAT_SELECTOR = (
+    "bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best"
+)
 
 
 class YouTubeDownloader:
@@ -38,64 +42,90 @@ class YouTubeDownloader:
     def get_optimal_download_options(
         self,
         video_id: str,
+        progress_hook: Optional[Callable[[Dict[str, Any]], None]] = None,
+        *,
+        prefer_safari_hls: bool = True,
     ) -> Dict[str, Any]:
-        """Get optimal yt-dlp options for high-quality downloads."""
+        """Get yt-dlp options that favour reliable, directly playable downloads."""
         output_path = self.temp_dir / f"{video_id}.%(ext)s"
+        format_selector = (
+            YTDLP_SAFARI_FORMAT_SELECTOR
+            if prefer_safari_hls
+            else YTDLP_DEFAULT_FORMAT_SELECTOR
+        )
 
         opts = {
             "outtmpl": str(output_path),
-            # Use best available video/audio to avoid quality caps from container constraints.
-            "format": "bestvideo*+bestaudio/best",
-            "format_sort": ["res", "fps"],
-            "merge_output_format": "mp4",
+            "format": format_selector,
             "writesubtitles": False,
             "writeautomaticsub": False,
             "noplaylist": True,
             "overwrites": True,
-            # Optimized for speed and reliability
+            "continuedl": False,
+            "merge_output_format": "mp4",
+            # Bound individual network operations so a failed upstream request
+            # cannot leave a task displaying "Downloading video" indefinitely.
             "socket_timeout": 30,
-            "retries": 5,  # Increased retries
-            "fragment_retries": 5,
-            "http_chunk_size": 10485760,  # 10MB chunks
-            # Quiet operation - only errors/warnings
+            "retries": 3,
+            "fragment_retries": 3,
+            "extractor_retries": 3,
+            "file_access_retries": 1,
+            "concurrent_fragment_downloads": 1,
+            # Quiet operation - errors still flow through the application logs.
             "quiet": True,
-            "no_warnings": False,  # Show warnings but not info
+            "no_warnings": False,
             "ignoreerrors": False,
-            # Enhanced headers to avoid 403 errors
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate",
-                "Connection": "keep-alive",
-            },
-            # Metadata extraction
-            "extract_flat": False,
             "writeinfojson": False,
-            # Additional bypass options
             "nocheckcertificate": True,
-            "prefer_insecure": False,
-            "age_limit": None,
         }
+        if prefer_safari_hls:
+            # web_safari can expose HLS streams that avoid some direct media 403s.
+            # Some videos expose only storyboards through that client, so callers
+            # fall back to yt-dlp's default clients below.
+            opts["extractor_args"] = _build_youtube_extractor_args()
+        else:
+            opts["format_sort"] = ["res:1080", "fps", "codec:avc:m4a"]
+        _apply_youtube_auth_options(opts)
+        if progress_hook:
+            opts["progress_hooks"] = [progress_hook]
 
         return opts
 
 
-def _build_info_options() -> Dict[str, Any]:
+def _build_youtube_extractor_args() -> Dict[str, Dict[str, list[str]]]:
+    """Return extractor arguments compatible with yt-dlp's Python API."""
+    config = get_config()
+    youtube_args: Dict[str, list[str]] = {"player_client": ["web_safari"]}
+    if config.youtube_po_token:
+        youtube_args["po_token"] = [config.youtube_po_token]
+    return {"youtube": youtube_args}
+
+
+def _apply_youtube_auth_options(options: Dict[str, Any]) -> None:
+    """Add an optional Netscape cookie file without making it mandatory."""
+    cookies_file = get_config().youtube_cookies_file
+    if not cookies_file:
+        return
+
+    path = Path(cookies_file).expanduser()
+    if not path.is_file():
+        raise ValueError("YOUTUBE_COOKIES_FILE must point to a readable cookie file")
+    options["cookiefile"] = str(path)
+
+
+def _build_info_options(*, prefer_safari_hls: bool = True) -> Dict[str, Any]:
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "extractaudio": False,
         "skip_download": True,
         "socket_timeout": 30,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Connection": "keep-alive",
-        },
+        "extractor_retries": 3,
         "nocheckcertificate": True,
     }
+    if prefer_safari_hls:
+        ydl_opts["extractor_args"] = _build_youtube_extractor_args()
+    _apply_youtube_auth_options(ydl_opts)
     return ydl_opts
 
 
@@ -272,9 +302,25 @@ def _fetch_video_info_with_ytdlp(url: str) -> Dict[str, Any]:
     if not video_id:
         raise ValueError(f"Invalid YouTube URL: {url}")
 
-    ydl_opts = _build_info_options()
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    last_error: Optional[Exception] = None
+    for prefer_safari_hls in (True, False):
+        try:
+            ydl_opts = _build_info_options(prefer_safari_hls=prefer_safari_hls)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            break
+        except yt_dlp.utils.DownloadError as exc:
+            last_error = exc
+            if prefer_safari_hls and _is_requested_format_unavailable(exc):
+                logger.info(
+                    "yt-dlp Safari metadata lookup found no media formats for %s; "
+                    "retrying with default YouTube clients",
+                    video_id,
+                )
+                continue
+            raise
+    else:
+        raise last_error or RuntimeError("yt-dlp metadata lookup failed")
 
     return {
         "id": info.get("id"),
@@ -461,10 +507,15 @@ def download_youtube_video_with_apify(
     )
 
 
+def _is_requested_format_unavailable(error: Exception) -> bool:
+    return "Requested format is not available" in str(error)
+
+
 def _download_youtube_video_with_ytdlp(
     url: str,
     max_retries: int = 3,
     task_id: Optional[str] = None,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
 ) -> Optional[Path]:
     """
     Download YouTube video with optimized settings and retry logic.
@@ -493,69 +544,116 @@ def _download_youtube_video_with_ytdlp(
         logger.warning(f"Video duration ({duration}s) exceeds recommended limit")
 
     last_error: Optional[str] = None
+    last_progress = -1
 
-    for attempt in range(max_retries):
-        try:
-            logger.info("Download attempt %s/%s", attempt + 1, max_retries)
+    def report_download_progress(data: Dict[str, Any]) -> None:
+        nonlocal last_progress
+        if not progress_callback or data.get("status") != "downloading":
+            return
 
-            ydl_opts = downloader.get_optimal_download_options(video_id)
+        total_bytes = data.get("total_bytes") or data.get("total_bytes_estimate")
+        downloaded_bytes = data.get("downloaded_bytes") or 0
+        if not total_bytes:
+            return
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+        percentage = min(100, int(downloaded_bytes * 100 / total_bytes))
+        # Reserve 30% for transcription, so download updates stay inside 10-29%.
+        task_progress = 10 + min(19, int(percentage * 19 / 100))
+        if task_progress <= last_progress:
+            return
+        last_progress = task_progress
+        progress_callback(task_progress, f"Downloading video... {percentage}%")
 
-            logger.info(f"Searching for downloaded file: {video_id}.*")
-            downloaded_files = [
-                file_path
-                for file_path in downloader.temp_dir.glob(f"{video_id}.*")
-                if file_path.is_file()
-                and file_path.suffix.lower() in [".mp4", ".mkv", ".webm"]
-            ]
-            if downloaded_files:
-                ranked_files = []
-                for candidate in downloaded_files:
-                    width, height = _get_local_video_dimensions(candidate)
-                    ranked_files.append(
-                        (
-                            height,
-                            width,
-                            candidate.stat().st_size,
-                            candidate,
-                        )
-                    )
-                ranked_files.sort(reverse=True)
-                best_downloaded_file = ranked_files[0][3]
-                file_size = best_downloaded_file.stat().st_size
-                width, height = _get_local_video_dimensions(best_downloaded_file)
+    download_strategies = [
+        ("safari_hls_single_stream", True),
+        ("default_best_video_audio", False),
+    ]
+
+    for strategy_name, prefer_safari_hls in download_strategies:
+        for attempt in range(max_retries):
+            try:
                 logger.info(
-                    f"Download successful: {best_downloaded_file.name} ({file_size // 1024 // 1024}MB, {width}x{height})"
+                    "Download attempt %s/%s using %s",
+                    attempt + 1,
+                    max_retries,
+                    strategy_name,
                 )
-                return best_downloaded_file
 
-            logger.warning("No video file found after download attempt %s", attempt + 1)
+                ydl_opts = downloader.get_optimal_download_options(
+                    video_id,
+                    report_download_progress,
+                    prefer_safari_hls=prefer_safari_hls,
+                )
 
-        except yt_dlp.utils.DownloadError as e:
-            last_error = str(e)
-            logger.warning("Download attempt %s failed: %s", attempt + 1, e)
-            if attempt < max_retries - 1:
-                wait_time = 2**attempt
-                logger.info(f"Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-            else:
-                logger.error("All download attempts failed")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
 
-        except Exception as e:
-            last_error = str(e)
-            logger.error(
-                "Unexpected error during download attempt %s: %s",
-                attempt + 1,
-                e,
-            )
-            if attempt < max_retries - 1:
-                wait_time = 2**attempt
-                logger.info(f"Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-            else:
-                logger.error("All download attempts failed")
+                logger.info(f"Searching for downloaded file: {video_id}.*")
+                downloaded_files = [
+                    file_path
+                    for file_path in downloader.temp_dir.glob(f"{video_id}.*")
+                    if file_path.is_file()
+                    and file_path.suffix.lower() in [".mp4", ".mkv", ".webm"]
+                ]
+                if downloaded_files:
+                    ranked_files = []
+                    for candidate in downloaded_files:
+                        width, height = _get_local_video_dimensions(candidate)
+                        ranked_files.append(
+                            (
+                                height,
+                                width,
+                                candidate.stat().st_size,
+                                candidate,
+                            )
+                        )
+                    ranked_files.sort(reverse=True)
+                    best_downloaded_file = ranked_files[0][3]
+                    file_size = best_downloaded_file.stat().st_size
+                    width, height = _get_local_video_dimensions(best_downloaded_file)
+                    logger.info(
+                        f"Download successful: {best_downloaded_file.name} ({file_size // 1024 // 1024}MB, {width}x{height})"
+                    )
+                    return best_downloaded_file
+
+                logger.warning("No video file found after download attempt %s", attempt + 1)
+
+            except yt_dlp.utils.DownloadError as e:
+                last_error = str(e)
+                logger.warning(
+                    "Download attempt %s with %s failed: %s",
+                    attempt + 1,
+                    strategy_name,
+                    e,
+                )
+                if prefer_safari_hls and _is_requested_format_unavailable(e):
+                    logger.info(
+                        "Safari/HLS download strategy found no media formats for %s; "
+                        "trying default yt-dlp clients",
+                        video_id,
+                    )
+                    break
+                if attempt < max_retries - 1:
+                    wait_time = 2**attempt
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("All %s download attempts failed", strategy_name)
+
+            except Exception as e:
+                last_error = str(e)
+                logger.error(
+                    "Unexpected error during download attempt %s with %s: %s",
+                    attempt + 1,
+                    strategy_name,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    wait_time = 2**attempt
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("All %s download attempts failed", strategy_name)
 
     if last_error:
         logger.error("All download attempts failed for %s: %s", url, last_error)
@@ -567,6 +665,7 @@ def download_youtube_video(
     url: str,
     max_retries: int = 3,
     task_id: Optional[str] = None,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
 ) -> Optional[Path]:
     """
     Download YouTube video using the configured provider.
@@ -596,6 +695,7 @@ def download_youtube_video(
                 url,
                 max_retries,
                 task_id,
+                progress_callback,
             )
             if downloaded_path:
                 return downloaded_path
@@ -632,9 +732,28 @@ async def async_download_youtube_video(
     url: str,
     max_retries: int = 3,
     task_id: Optional[str] = None,
+    progress_callback: Optional[Callable[[int, str, str], Any]] = None,
 ) -> Optional[Path]:
     logger.info(f"Starting async YouTube download: {url}")
-    return await asyncio.to_thread(download_youtube_video, url, max_retries, task_id)
+    loop = asyncio.get_running_loop()
+
+    def report_download_progress(progress: int, message: str) -> None:
+        if not progress_callback:
+            return
+        future = asyncio.run_coroutine_threadsafe(
+            progress_callback(progress, message, "processing"), loop
+        )
+        # Retrieve errors so a failed progress write never leaks an unhandled
+        # exception or interrupts the actual download.
+        future.add_done_callback(lambda completed: completed.exception())
+
+    return await asyncio.to_thread(
+        download_youtube_video,
+        url,
+        max_retries,
+        task_id,
+        report_download_progress,
+    )
 
 
 def get_video_duration(url: str) -> Optional[int]:

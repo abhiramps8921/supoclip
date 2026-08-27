@@ -82,6 +82,19 @@ YouTube downloads use `yt-dlp` by default so self-hosted and free deployments do
 YOUTUBE_DOWNLOAD_PROVIDER=yt_dlp
 ```
 
+The default downloader prefers YouTube's Safari/HLS stream, avoiding the
+separate DASH requests that YouTube may protect with a PO token. For videos
+that still require sign-in or bot verification, provide a Netscape-format
+cookie file and/or a current PO token. In Docker, mount the cookie file into
+both the `backend` and `worker` containers and use that container path:
+
+```env
+YOUTUBE_COOKIES_FILE=/app/cookies/youtube.txt
+YOUTUBE_PO_TOKEN=
+```
+
+Keep cookie files and PO tokens out of version control.
+
 Set `YOUTUBE_DOWNLOAD_PROVIDER=apify` only when you want to use the paid Apify actor as the primary downloader:
 
 ```env

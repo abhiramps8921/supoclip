@@ -99,12 +99,21 @@ class VideoService:
         raise ValueError("Only upload:// references are allowed for local video sources")
 
     @staticmethod
-    async def download_video(url: str, task_id: Optional[str] = None) -> Optional[Path]:
+    async def download_video(
+        url: str,
+        task_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, str, str], Awaitable[None]]] = None,
+    ) -> Optional[Path]:
         """
         Download a YouTube video asynchronously.
         """
         logger.info(f"Starting video download: {url}")
-        video_path = await async_download_youtube_video(url, 3, task_id)
+        video_path = await async_download_youtube_video(
+            url,
+            3,
+            task_id,
+            progress_callback,
+        )
 
         if not video_path:
             logger.error(f"Failed to download video: {url}")
@@ -376,7 +385,11 @@ class VideoService:
                             f"Maximum allowed duration is {mins} minutes."
                         )
 
-                video_path = await VideoService.download_video(url, task_id=task_id)
+                video_path = await VideoService.download_video(
+                    url,
+                    task_id=task_id,
+                    progress_callback=progress_callback,
+                )
                 if not video_path:
                     raise Exception("Failed to download video")
             else:

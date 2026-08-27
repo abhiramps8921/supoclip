@@ -230,13 +230,15 @@ def get_video_transcript(video_path: Path, speech_model: str = "universal") -> s
                     runtime_config.assembly_ai_http_timeout_seconds,
                 )
                 break
-            except (httpx.TimeoutException, TimeoutError):
+            except (httpx.TransportError, TimeoutError) as exc:
                 logger.warning(
-                    "AssemblyAI transcription timed out on attempt %s/3",
+                    "AssemblyAI transcription request failed on attempt %s/3: %s",
                     attempt,
+                    exc,
                 )
                 if attempt == 3:
                     raise
+                time.sleep(2**attempt)
 
         if transcript is None:
             raise RuntimeError("AssemblyAI transcription did not return a transcript")

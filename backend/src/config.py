@@ -30,6 +30,8 @@ class Config:
         self.youtube_download_provider = self._normalize_youtube_download_provider(
             os.getenv("YOUTUBE_DOWNLOAD_PROVIDER", "yt_dlp")
         )
+        self.youtube_cookies_file = self._get_optional_env("YOUTUBE_COOKIES_FILE")
+        self.youtube_po_token = self._get_optional_env("YOUTUBE_PO_TOKEN")
         self.youtube_metadata_provider = self._normalize_youtube_metadata_provider(
             os.getenv("YOUTUBE_METADATA_PROVIDER", "yt_dlp")
         )

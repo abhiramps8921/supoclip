@@ -1,15 +1,22 @@
+import asyncio
+
 import requests
+import pytest
 
 from src.apify_youtube_downloader import ApifyDownloadError
 from src.config import Config, set_config_override
 from src.youtube_utils import (
+    YTDLP_DEFAULT_FORMAT_SELECTOR,
+    YTDLP_SAFARI_FORMAT_SELECTOR,
     YOUTUBE_DOWNLOAD_PROVIDER_APIFY,
     YOUTUBE_DOWNLOAD_PROVIDER_YTDLP,
     YOUTUBE_METADATA_PROVIDER_DATA_API,
     YOUTUBE_METADATA_PROVIDER_YTDLP,
     _fetch_video_info_with_youtube_data_api,
+    YouTubeDownloader,
     _parse_iso8601_duration_to_seconds,
     _pick_best_thumbnail,
+    async_download_youtube_video,
     download_youtube_video,
     get_youtube_video_info,
 )
@@ -52,6 +59,78 @@ def test_download_youtube_video_prefers_ytdlp_by_default(tmp_path, monkeypatch):
         assert result == ytdlp_path
     finally:
         set_config_override(None)
+
+
+def test_ytdlp_options_prefer_safari_single_stream_and_report_progress(tmp_path):
+    config = Config()
+    config.temp_dir = str(tmp_path)
+    set_config_override(config)
+    try:
+        updates = []
+        options = YouTubeDownloader().get_optimal_download_options(
+            "abcdefghijk",
+            lambda data: updates.append(data),
+        )
+
+        assert options["format"] == YTDLP_SAFARI_FORMAT_SELECTOR
+        assert options["extractor_args"]["youtube"]["player_client"] == ["web_safari"]
+        assert options["progress_hooks"]
+    finally:
+        set_config_override(None)
+
+
+def test_ytdlp_options_can_use_default_clients_for_format_fallback(tmp_path):
+    config = Config()
+    config.temp_dir = str(tmp_path)
+    set_config_override(config)
+    try:
+        options = YouTubeDownloader().get_optimal_download_options(
+            "abcdefghijk",
+            prefer_safari_hls=False,
+        )
+
+        assert options["format"] == YTDLP_DEFAULT_FORMAT_SELECTOR
+        assert "extractor_args" not in options
+        assert options["merge_output_format"] == "mp4"
+    finally:
+        set_config_override(None)
+
+
+def test_ytdlp_options_apply_optional_cookie_file(tmp_path):
+    cookie_file = tmp_path / "youtube.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n")
+    config = Config()
+    config.temp_dir = str(tmp_path)
+    config.youtube_cookies_file = str(cookie_file)
+    set_config_override(config)
+    try:
+        options = YouTubeDownloader().get_optimal_download_options("abcdefghijk")
+
+        assert options["cookiefile"] == str(cookie_file)
+    finally:
+        set_config_override(None)
+
+
+@pytest.mark.asyncio
+async def test_async_download_forwards_byte_progress_to_task_callback(monkeypatch):
+    updates = []
+
+    def fake_download(_url, _retries, _task_id, progress_callback):
+        progress_callback(21, "Downloading video... 60%")
+        return None
+
+    async def capture_progress(progress, message, status):
+        updates.append((progress, message, status))
+
+    monkeypatch.setattr("src.youtube_utils.download_youtube_video", fake_download)
+
+    await async_download_youtube_video(
+        "https://www.youtube.com/watch?v=abcdefghijk",
+        progress_callback=capture_progress,
+    )
+    await asyncio.sleep(0)
+
+    assert updates == [(21, "Downloading video... 60%", "processing")]
 
 
 def test_download_youtube_video_uses_apify_when_configured(tmp_path, monkeypatch):
