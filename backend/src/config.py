@@ -51,6 +51,9 @@ class Config:
         )
 
         self.max_video_duration = int(os.getenv("MAX_VIDEO_DURATION", "5400"))
+        self.max_video_upload_bytes = int(
+            os.getenv("MAX_VIDEO_UPLOAD_BYTES", "50000000000")
+        )
         self.output_dir = os.getenv("OUTPUT_DIR", "outputs")
 
         self.max_clips = int(os.getenv("MAX_CLIPS", "10"))

@@ -28,7 +28,6 @@ from fastapi import Depends
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["media"])
-MAX_VIDEO_UPLOAD_BYTES = 1_000_000_000
 MAX_FONT_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
@@ -275,7 +274,9 @@ async def upload_video(request: Request, db: AsyncSession = Depends(get_db)):
         video_path = uploads_dir / unique_filename
 
         # Save the uploaded file
-        await _write_upload_to_disk(upload, video_path, MAX_VIDEO_UPLOAD_BYTES)
+        await _write_upload_to_disk(
+            upload, video_path, config.max_video_upload_bytes
+        )
 
         logger.info(f"✅ Video uploaded successfully to: {video_path}")
 
