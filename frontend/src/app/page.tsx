@@ -623,7 +623,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="border-b bg-white relative">
+      <div className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/90 backdrop-blur relative">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -837,11 +837,11 @@ export default function Home() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         {/* Latest Generation Banner */}
         {latestTask && (
           <Link href={`/tasks/${latestTask.id}`} className="block mb-8">
-            <div className="flex items-center justify-between p-4 rounded-xl border border-stone-200 bg-stone-50/50 hover:bg-stone-50 transition-colors group">
+            <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50/50 p-4 transition-colors group hover:border-stone-300 hover:bg-stone-50">
               <div className="flex items-center gap-4 min-w-0">
                 <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-stone-900 flex items-center justify-center">
                   <Film className="w-5 h-5 text-white" />
@@ -880,7 +880,7 @@ export default function Home() {
         )}
 
         {isLoadingLatest && (
-          <div className="mb-8 p-4 rounded-xl border border-stone-200">
+          <div className="mb-8 rounded-lg border border-stone-200 p-4">
             <div className="flex items-center gap-4">
               <Skeleton className="w-10 h-10 rounded-lg" />
               <div>
@@ -892,9 +892,9 @@ export default function Home() {
         )}
 
         {/* Two Column Layout */}
-        <div className="flex flex-col lg:flex-row gap-10 items-start">
+        <div className="flex flex-col items-start gap-8 lg:flex-row lg:gap-12">
           {/* Left Column — Form */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1 lg:max-w-[640px]">
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-stone-900 mb-2">
                 Create New Clip
@@ -922,7 +922,7 @@ export default function Home() {
 
               {/* Source Type Tabs */}
               <div className="space-y-3">
-                <div className="flex gap-2">
+                <div className="flex w-full gap-1 rounded-lg bg-stone-100 p-1 sm:w-fit">
                   <button
                     type="button"
                     onClick={() => {
@@ -932,7 +932,7 @@ export default function Home() {
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
                     disabled={generationControlsDisabled}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all sm:flex-none ${
                       sourceType === "youtube"
                         ? "bg-stone-900 text-white shadow-sm"
                         : "bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -945,7 +945,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setSourceType("upload")}
                     disabled={generationControlsDisabled}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all sm:flex-none ${
                       sourceType === "upload"
                         ? "bg-stone-900 text-white shadow-sm"
                         : "bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -967,12 +967,12 @@ export default function Home() {
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
                       disabled={generationControlsDisabled}
-                      className="h-14 pl-12 text-base rounded-xl border-stone-300 focus:border-stone-500 placeholder:text-stone-400"
+                      className="h-14 rounded-lg border-stone-300 pl-12 text-base placeholder:text-stone-400"
                     />
                   </div>
                 ) : (
                   <div
-                    className="relative border-2 border-dashed border-stone-300 rounded-xl p-8 text-center hover:border-stone-400 transition-colors cursor-pointer"
+                    className="relative cursor-pointer rounded-lg border-2 border-dashed border-stone-300 bg-stone-50/50 p-8 text-center transition-colors hover:border-primary/60 hover:bg-stone-50 sm:p-10"
                     onClick={() => !generationControlsDisabled && fileInputRef.current?.click()}
                   >
                     <input
@@ -998,8 +998,8 @@ export default function Home() {
               </div>
 
               {/* Caption & Style Section */}
-              <Card className="border-stone-200">
-                <CardContent className="px-4 pt-0 pb-2.5 space-y-2.5">
+              <Card className="border-0 bg-transparent py-0 shadow-none">
+                <CardContent className="space-y-3 px-0 py-0">
                   <div className="flex items-center gap-2 text-sm font-medium text-stone-900">
                     <Sparkles className="w-4 h-4" />
                     Style & Captions
@@ -1315,7 +1315,7 @@ export default function Home() {
                   </div>
 
                   {currentStep && statusMessage && (
-                    <div className="bg-stone-50 rounded-xl p-4 space-y-3 border border-stone-200">
+                    <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
                       <div className="flex items-center gap-3">
                         {getStepIcon(currentStep)}
                         <div className="flex-1">
@@ -1375,7 +1375,7 @@ export default function Home() {
 
               <Button
                 type="submit"
-                className="w-full h-12 text-base rounded-xl"
+                className="h-12 w-full rounded-lg text-base"
                 disabled={
                   (sourceType === "youtube" && !url.trim()) ||
                   (sourceType === "upload" && !fileRef.current) ||
@@ -1390,14 +1390,14 @@ export default function Home() {
 
           {/* Right Column — Phone Preview */}
           <div
-            className={`hidden lg:block flex-shrink-0 overflow-hidden transition-all duration-500 ease-in-out ${
+            className={`hidden flex-shrink-0 overflow-hidden transition-all duration-200 ease-out lg:block ${
               sourceType === "upload"
                 ? "w-0 opacity-0"
                 : "w-[340px] opacity-100"
             }`}
           >
             <div
-              className={`w-[340px] transition-all duration-500 ease-in-out ${
+              className={`w-[340px] transition-all duration-200 ease-out ${
                 sourceType === "upload"
                   ? "translate-x-6 scale-[0.97] opacity-0"
                   : "translate-x-0 scale-100 opacity-100"

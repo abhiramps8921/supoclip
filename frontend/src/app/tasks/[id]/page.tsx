@@ -694,7 +694,7 @@ export default function TaskPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="border-b bg-white">
+      <div className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center gap-4 mb-4">
             <Link href="/">
@@ -842,36 +842,36 @@ export default function TaskPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:py-10">
         {task?.status === "processing" || task?.status === "queued" ? (
           <div className="space-y-8">
             {/* Progress indicator */}
-            <div className="flex flex-col items-center py-8">
+            <div className="mx-auto flex max-w-2xl flex-col items-center rounded-lg border border-stone-200 bg-stone-50/60 px-6 py-8 sm:px-10">
               {/* Minimal animated dots */}
-              <div className="relative group flex items-center gap-1.5 mb-8 cursor-default">
-                <span className="w-2 h-2 bg-neutral-800 rounded-full animate-[pulse_1.4s_ease-in-out_infinite]" />
-                <span className="w-2 h-2 bg-neutral-800 rounded-full animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
-                <span className="w-2 h-2 bg-neutral-800 rounded-full animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
+              <div className="relative group mb-6 flex cursor-default items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-primary animate-[pulse_1.4s_ease-in-out_infinite]" />
+                <span className="h-2 w-2 rounded-full bg-primary animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
+                <span className="h-2 w-2 rounded-full bg-primary animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
                 <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md opacity-0 scale-95 transition-all group-hover:opacity-100 group-hover:scale-100 pointer-events-none">
                   ☕&nbsp;&nbsp;Grab a coffee, and come back to ready-to-post clips.
                 </div>
               </div>
 
               {/* Status message */}
-              <p className="shimmer text-neutral-600/60 text-sm tracking-wide mb-8">
+              <p className="mb-6 text-center text-sm tracking-wide text-neutral-600/80">
                 {progressMessage || (task.status === "queued" ? "Waiting in queue" : "Processing")}
               </p>
 
               {/* Minimal progress bar */}
               {progress > 0 && (
-                <div className="w-48">
-                  <div className="h-px bg-neutral-200 w-full relative overflow-hidden">
+                <div className="w-full max-w-md">
+                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-neutral-200">
                     <div
-                      className="absolute inset-y-0 left-0 bg-neutral-800 transition-all duration-700 ease-out"
+                      className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-300 ease-out"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <p className="text-[11px] text-neutral-400 text-center mt-3 tabular-nums">{progress}%</p>
+                  <p className="mt-3 text-center text-[11px] tabular-nums text-neutral-400">{progress}%</p>
                 </div>
               )}
             </div>
