@@ -6,6 +6,8 @@ import { DataFastIdentity } from "@/components/datafast-identity";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const defaultMetadataBase = "http://localhost:3107";
 
@@ -64,7 +66,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {isDataFastEnabled ? (
           <>
@@ -87,12 +89,21 @@ export default function RootLayout({
         ) : null}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${syne.variable} antialiased`}>
-        <TooltipProvider>
-          {children}
-          <DataFastIdentity />
-          <FeedbackButton />
-          <Toaster />
-        </TooltipProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+          storageKey="supoclip-theme"
+        >
+          <TooltipProvider>
+            {children}
+            <DataFastIdentity />
+            <ThemeToggle />
+            <FeedbackButton />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1412,7 +1412,7 @@ export default function Home() {
               {/* Phone Frame — realistic iPhone style */}
               <div className="mx-auto" style={{ maxWidth: "300px" }}>
                 <div
-                  className="relative bg-stone-950"
+                  className="relative bg-stone-950 dark:bg-white"
                   style={{ borderRadius: "3rem", padding: "12px" }}
                 >
                   {/* Screen with inner radius */}
